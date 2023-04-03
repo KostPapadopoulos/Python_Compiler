@@ -10,6 +10,7 @@ def main():
 		print(5);
 	   while (t>=34) :
 	   #{
+		g = int(input());
 		t = 5;
 		t = + 1 + t - 5;
 

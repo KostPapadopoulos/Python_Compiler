@@ -3,7 +3,7 @@
 
 
 import sys
-global quadCounter 
+
 quadCounter = 0
 
 class Token :
@@ -303,14 +303,67 @@ class Lex :
                         else :
                             sys.exit("Expected either '$' or '{' or '}' ! ")
       
+             
+class Quad :
+    
+    def __init__(self, operator, oper1, oper2, oper3) :
+        self.operator = operator
+        self.oper1 = oper1
+        self.oper2 = oper2
+        self.oper3 = oper3
+    
 
+class QuadPointer :
+    def __init__(self) :
+        self.pointerHashMap = {}
+
+    def addToHashMap(self, key, value) :
+        self.pointerHashMap[key] = value
+
+
+class IntermediateCode :
+    counter = 0 
+
+    def genQuad(self, operator, oper1, oper2, oper3) -> Quad :
+        newQuad = Quad(operator, oper1, oper2, oper3)
+        global quadCounter 
+        quadCounter += 1 
+        quadPointer = QuadPointer()
+        quadPointer.addToHashMap(quadCounter,newQuad)
+        #quadPointer.pointerHashMap.keys
+        return newQuad
+    
+    def backPatch(self, listOfQuad, nextLabel) :
+        for quad in listOfQuad :
+            quad.oper3 = nextLabel
+
+    def nextQuad(self) -> int:
+        return  quadCounter + 1 
+    
+    def newTemp(self, cls) -> str :
+        cls.counter += 1
+        return f"T_{cls.counter}"
+    
+    def emptyList(self) -> list:
+        quadPointerList = []
+        return quadPointerList
+
+    def makeList(self, x : int) -> list :
+        newQuadPointerList = [x]
+        return newQuadPointerList
+    
+    def merge(self, list1, list2) -> list:
+        extendedList = list1 + list2
+        return extendedList
+    
 
 class Syntax_Analyzer :
     
     current_line = 0
     input_file = ""
-
+    output_code = ""
     my_lex = Lex(None,None)
+    inter_code = IntermediateCode()
     
     def __init__(self, this_input_file, lexical_analyzer):
         self.input_file = this_input_file
@@ -321,6 +374,10 @@ class Syntax_Analyzer :
     def get_token(self) :
         self.token = self.my_lex.analyze()
         return self.token
+    
+    def write_to_file(self, counter : int, quad : Quad) :
+        result = str(quadCounter) + ": " + quad.operator + " " + str(quad.oper1) + " " + str(quad.oper2) + " " + str(quad.oper3) + "\n"
+        return result
 
     def start_rule(self) :
         print("Compiling code...")
@@ -344,10 +401,12 @@ class Syntax_Analyzer :
 
 
     def def_main_function(self) :
+        global quadCounter
         if self.token.recognized_string in keyword :
             sys.exit("Invalid variable name inside function definition! \n Variable name shouldn't be a keyword!")
         
         if self.token.family == "Alphabetical" :
+            main_name = self.token.recognized_string
             self.token = self.get_token()
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
@@ -361,8 +420,12 @@ class Syntax_Analyzer :
                             while self.token.recognized_string == "def" :
                                 self.token = self.get_token()
                                 self.def_function()
+                            begin_block_quad = self.inter_code.genQuad("begin_block",main_name, "_","_")
+                            self.output_code += self.write_to_file(quadCounter, begin_block_quad)
                             self.statements()
                             if self.token.recognized_string == "#}" :
+                                end_block_quad = self.inter_code.genQuad("end_block",main_name, "_","_")
+                                self.output_code += self.write_to_file(quadCounter, end_block_quad)
                                 self.token = self.get_token()
                             else :
                                 sys.exit("Invalid definition of main function! \n '#}' expected!")
@@ -382,6 +445,7 @@ class Syntax_Analyzer :
         if self.token.recognized_string in keyword :
             sys.exit("Invalid variable name inside function definition! \n Variable name shouldn't be a keyword!")
         if self.token.family == "Alphabetical" :
+            func_name = self.token.recognized_string 
             self.token = self.get_token()
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
@@ -396,8 +460,12 @@ class Syntax_Analyzer :
                             while self.token.recognized_string == "def" :
                                 self.token = self.get_token()
                                 self.def_function()
+                            begin_block_quad = self.inter_code.genQuad("begin_block", func_name, "_","_")
+                            self.output_code += self.write_to_file(quadCounter, begin_block_quad)
                             self.statements()
                             if self.token.recognized_string == "#}" :
+                                end_block_quad = self.inter_code.genQuad("end_block", func_name, "_","_")
+                                self.output_code += self.write_to_file(quadCounter, end_block_quad)
                                 self.token = self.get_token()
                             else :
                                 sys.exit("Invalid definition of function! \n '#}' expected!")
@@ -451,6 +519,7 @@ class Syntax_Analyzer :
         else :
             sys.exit("Invalid simple statement syntax!")
 
+
     def structured_statement(self) :
         if self.token.recognized_string == "if" :
             self.if_stat()
@@ -460,22 +529,33 @@ class Syntax_Analyzer :
             sys.exit("Invalid structured statement syntax!")
 
     def assignement_stat(self) :
+        id = self.token.recognized_string
         self.token = self.get_token()
         if self.token.recognized_string == "=" :
+            assign_inp_list = self.inter_code.emptyList()
             self.token = self.get_token()
             if self.token.recognized_string == "int" :
+                assign_inp_list.append(self.token.recognized_string)
                 self.token = self.get_token()
                 if self.token.recognized_string == "(" :
+                    assign_inp_list.append(self.token.recognized_string)
                     self.token = self.get_token()
                     if self.token.recognized_string == "input" :
+                        assign_inp_list.append(self.token.recognized_string)
                         self.token = self.get_token()
                         if self.token.recognized_string == "(" :
+                            assign_inp_list.append(self.token.recognized_string)
                             self.token = self.get_token()
                             if self.token.recognized_string == ")" :
+                                assign_inp_list.append(self.token.recognized_string)
                                 self.token = self.get_token()
                                 if self.token.recognized_string == ")" :
+                                    assign_inp_list.append(self.token.recognized_string)
                                     self.token = self.get_token()
                                     if self.token.recognized_string == ";" :
+                                        assign_inp_list.append(self.token.recognized_string)
+                                        ass_inp_quad = self.inter_code.genQuad(":=", assign_inp_list, "_", id)
+                                        self.output_code += self.write_to_file(quadCounter, ass_inp_quad)
                                         self.token = self.get_token()
                                     else :
                                         sys.exit("Invalid simple statement syntax! \n Simple statements should end with ';'!")
@@ -493,6 +573,8 @@ class Syntax_Analyzer :
                 self.expression()
                 if not self.token.recognized_string == ";" :
                     sys.exit("Invalid simple statement syntax! \n Simple statements should end with ';'!")
+                ass_plain_quad = self.inter_code.genQuad(":=", new_list, "_", id)
+                self.output_code += self.write_to_file(quadCounter, ass_plain_quad)
                 self.token = self.get_token()
         else :
             sys.exit("Invalid simple statement syntax!")
@@ -506,6 +588,8 @@ class Syntax_Analyzer :
             if self.token.recognized_string == ")" :
                 self.token = self.get_token()
                 if self.token.recognized_string == ";" :
+                    print_quad = self.inter_code.genQuad("out", new_list, "_", "_")
+                    self.output_code += self.write_to_file(quadCounter, print_quad)
                     self.token = self.get_token()
                 else :
                     sys.exit("Invalid print statement syntax! \n ';' expected!")
@@ -523,6 +607,8 @@ class Syntax_Analyzer :
             if self.token.recognized_string == ")" :
                 self.token = self.get_token()
                 if self.token.recognized_string == ";" :
+                    return_quad = self.inter_code.genQuad("retv", new_list, "_", "_")
+                    self.output_code += self.write_to_file(quadCounter, return_quad)
                     self.token = self.get_token()
                 else :
                     sys.exit("Invalid return statement syntax! \n ';' expected!")
@@ -533,6 +619,9 @@ class Syntax_Analyzer :
             
 
     def if_stat(self) :
+        global if_true_list, if_false_list
+        if_true_list = self.inter_code.emptyList()
+        if_false_list = self.inter_code.emptyList()
         self.token = self.get_token()
         if self.token.recognized_string == "(" :
             self.token = self.get_token()
@@ -633,9 +722,12 @@ class Syntax_Analyzer :
             pass   
 
     def expression(self) :
+        global new_list
+        new_list = self.inter_code.emptyList()
         self.optional_sign()
         self.term()
         while self.token.family == "AddOper" : 
+            new_list.append(self.token.recognized_string)
             self.token = self.get_token()
             self.term()
 
@@ -647,6 +739,7 @@ class Syntax_Analyzer :
 
     def factor(self) :
         if self.token.family == "Number" :
+            new_list.append(self.token.recognized_string)
             self.token = self.get_token()
 
         elif self.token.recognized_string == "(" :
@@ -661,6 +754,7 @@ class Syntax_Analyzer :
             sys.exit("Invalid variable name inside factor! \n Variable name should not be a keyword!")
 
         elif self.token.family == "Alphabetical":
+            new_list.append(self.token.recognized_string)
             self.token = self.get_token() 
             self.idtail()
                 
@@ -687,6 +781,7 @@ class Syntax_Analyzer :
           
     def optional_sign(self) :
         if self.token.family == "AddOper" :
+            new_list.append(self.token.recognized_string)
             self.token = self.get_token()
 
         else :
@@ -707,6 +802,7 @@ class Syntax_Analyzer :
     def bool_factor(self) : 
         if self.token.recognized_string == "not" :
             self.token = self.get_token() 
+
             if self.token.recognized_string == "[" :
                 self.token = self.get_token() 
                 self.condition()
@@ -729,8 +825,13 @@ class Syntax_Analyzer :
         else  :
             self.expression()
             if self.token.family == "RelOp" :
+                operator = self.token.recognized_string 
+                first_new_list = new_list
                 self.token = self.get_token() 
-                self.expression()
+                self.expression() 
+                bool_three_quad = self.inter_code.genQuad(operator, first_new_list, new_list, quadCounter + 2)
+                jump_if = self.inter_code.genQuad("jump", "_", "_", "_")
+                jump_ptr_list = self.inter_code.makeList(quadCounter)
             else :
                 sys.exit("Invalid boolean factor syntax! \n Expected a relational operator")
     
@@ -787,6 +888,8 @@ class Syntax_Analyzer :
                 if self.token.recognized_string == ';' :
                     self.token = self.get_token()
                     if self.token.recognized_string == "End Of File" :
+                        with open("intermediate_code.int", "w") as f :
+                            f.write(self.output_code)                
                         print("-------------------------------------------------------------------------------------------------------------------------------------")
                         sys.exit("Compilation completed successfully!")
                     else :
@@ -798,61 +901,13 @@ class Syntax_Analyzer :
         else :
              sys.exit("Invalid syntax when calling main function! \n '(' expected!")
 
-             
-class Quad :
-    
-    def __init__(self, operator, oper1, oper2, oper3) :
-        self.operator = operator
-        self.oper1 = oper1
-        self.oper2 = oper2
-        self.oper3 = oper3
-    
 
-class QuadPointer :
-    def __init__(self) :
-        self.pointerHashMap = {}
-
-    def addToHashMap(self, key, value) :
-        self.pointerHashMap[key] = value
-
-
-class IntermediateCode :
-    counter = 0 
-
-    def genQuad(self, operator, oper1, oper2, oper3) -> Quad :
-        newQuad = Quad(operator, oper1, oper2, oper3)
-        return newQuad
-    
-    def backPatch(self, listOfQuad, nextLabel) :
-        for quad in listOfQuad :
-            quad.oper3 = nextLabel
-
-    def nextQuad() -> int:
-        return pointer.label + 1 
-    
-    def newTemp(cls) -> str :
-        cls.counter += 1
-        return f"T_{cls.counter}"
-    
-    def emptyList() -> list:
-        quadPointerList = []
-        return quadPointerList
-
-    def makeList(x) -> list :
-        newQuadPointerList = [x]
-        return newQuadPointerList
-    
-    def merge(list1, list2) -> list:
-        extendedList = list1 + list2
-        return extendedList
-    
     
 
 
 if __name__ == '__main__' :
     if len(sys.argv) < 2 :
-        print("The format is 'python 'cutepy_4761_4765'.py 'test_file'.cpy !'")
-        sys.exit(1)
+        sys.exit("The format is 'python 'cutepy_4761_4765'.py 'test_file'.cpy !'")
 
     input_file = sys.argv[1]
     my_lex = Lex(input_file,1)

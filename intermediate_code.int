@@ -1,0 +1,13 @@
+1: begin_block calculate_length _ _
+2: retv ['string'] _ _
+3: := ['input'] _ my_string
+4: := ['my_string'] _ length
+5: out ['length'] _ _
+6: out ['5'] _ _
+7: := ['int', '(', 'input', '(', ')', ')', ';'] _ g
+8: := ['5'] _ t
+9: := ['+', '1', '+', 't', '-', '5'] _ t
+10: end_block calculate_length _ _
+11: begin_block main _ _
+12: := ['5'] _ x
+13: end_block main _ _
