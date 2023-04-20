@@ -3,6 +3,7 @@
 
 
 import sys
+from abc import ABC,abstractmethod
 
 quadCounter = 0
 
@@ -359,15 +360,137 @@ class IntermediateCode :
         extendedList = list1 + list2
         return extendedList
     
+class Entity(ABC) :
+    def __init__(self, name) -> None:
+        self.name = name
+
+class Variable(Entity) :
+    def __init__(self, name, datatype, offset) -> None :
+        super().__init__(name)
+        self.datatype = datatype
+        self.offset = offset
+
+class FormalParameter(Entity) : 
+    def __init__(self, name, datatype, mode) -> None:
+        super().__init__(name)
+        self.datatype = datatype
+        self.mode = mode
+
+
+class Parameter(Variable, FormalParameter) :
+
+    def __init__(self, name, datatype, mode, offset) -> None:
+        Variable.__init__(self, name, datatype, offset)
+        FormalParameter.__init__(self, name, datatype, mode)
+
+class Function : 
+
+    def __init__(self, name, datatype, starting_quad, frame_length, formal_parameters : list) -> None:
+        self.name = name
+        self.datatype = datatype
+        self.starting_quad = starting_quad
+        self.frame_length = frame_length
+        self.formal_parameters : list = formal_parameters
+
+
+class TemporaryVariable(Variable) :
+    def __init__(self, name, datatype, offset) -> None:
+        super().__init__(name, datatype, offset)
+        
+class SymbolicConstant(Entity) :
+    def __init__(self, name, datatype, value) -> None:
+        super().__init__(name)
+        self.datatype = datatype
+        self.value = value
+        
+class Scope :
+    def __init__(self, level) -> None:
+        self.level = level
+        self.entities : list[Entity] = []
+        
+    def addEntityScope(self, entity) :
+        self.entities.append(entity)
+
+
+class Table :
+
+    def __init__(self) :
+        self.level = 0    
+        self.first_scope = Scope(self.level)
+        self.scopes: list[Scope]= [self.first_scope] 
+        # Ta allaksa ligo auta 
+        
+    
+    def getCurrentScope(self) -> Scope :
+        return self.scopes[-1]
+    
+    # Den xreiazetai na pairnoume san orisma to cuurent scope afoy exoyme to pedio ths klashs level poy to akoloythei
+    def addScope(self) :
+        self.level += 1
+        new_scope = Scope(self.level)
+        self.scopes.append(new_scope)
+        
+
+    def deleteScope(self, level) :
+        for scope in self.scopes :
+            if scope.level == level :
+                self.scopes.remove(scope)
+        
+
+    def addEntityTable(self, ent_name, ent_type) :
+        if ent_type == "Variable" :
+            new_var = Variable(ent_name, "Integer", None)
+            print("Variable created!")
+        elif ent_type == "SymbolicConstant" :
+            new_var = SymbolicConstant(ent_name, "Integer", None)
+        elif ent_type == "FormalParameter" :
+            new_var = FormalParameter(ent_name, "Integer", None)
+        elif ent_type == "Function" :
+            new_var = Function(ent_name, "Integer", None, None, None)
+        else :
+            ValueError("Invalid entity type!")
+
+        print(new_var.name)
+        self.getCurrentScope().addEntityScope(new_var)
+
+    def updateFields(self, ent_name, datatype = None, offset = None, starting_quad = None, frame_length = None, formal_parameters = None, mode = None) :
+        for i in range(0, len(self.getCurrentScope().entities), 1) :
+            if  self.getCurrentScope().entities[i].name == ent_name :   
+                if datatype is not None :
+                    self.getCurrentScope().entities[i].datatype = datatype
+                if offset is not None :
+                    self.getCurrentScope().entities[i].offset = offset
+                if starting_quad is not None : 
+                    self.getCurrentScope().entities[i].starting_quad = starting_quad
+                if frame_length is not None :
+                    self.getCurrentScope().entities[i].frame_length = frame_length
+                if formal_parameters is not None :
+                   self.getCurrentScope().entities[i].formal_parameters = formal_parameters
+                if mode is not None :
+                   self.getCurrentScope().entities[i].mode = mode
+
+    def addFormalParameter(self, parameter) :
+        self.getCurrentScope().entities[-1].formal_parameter.append(parameter)
+            
+    def searchForEntry(self, ent_name) :
+        for i in range(len(self.level) -1, -1, -1) :
+            current_scope = self.scopes[i]    
+            for name in current_scope[self.level].entities[self.level].name :
+                if ent_name == name :
+                    return name
+        return ("Not found!")
+        
 
 class Syntax_Analyzer :
-    
+    global standard_offset
+    standard_offset = 12
     current_line = 0
     input_file = ""
     output_code = ""
+    output_symbol_table = ""
     my_lex = Lex(None,None)
     inter_code = IntermediateCode()
-
+    symbol_table = Table()
     
     def __init__(self, this_input_file, lexical_analyzer):
         self.input_file = this_input_file
@@ -390,9 +513,11 @@ class Syntax_Analyzer :
         return '\n'.join(lines)
 
     def start_rule(self) :
+        global level
         print("Compiling code...")
         print("-------------------------------------------------------------------------------------------------------------------------------------")
         self.token = self.get_token()
+        #self.symbol_table.addScope(self.)
         if  self.token.recognized_string == "def" :
             self.def_main_part() 
             if self.token.recognized_string == "if" :
@@ -456,6 +581,11 @@ class Syntax_Analyzer :
         if self.token.family == "Alphabetical" :
             global func_name
             func_name = self.token.recognized_string 
+            self.symbol_table.addEntityTable(func_name, "Function")
+            # Douleuei to na prosthetome sto current scope to onοma ths synarthshs
+            self.symbol_table.addScope()
+            allo_scope = self.symbol_table.getCurrentScope()
+            print("New scope sthn function " ,allo_scope.level)
             self.token = self.get_token()
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
@@ -493,6 +623,7 @@ class Syntax_Analyzer :
             self.declaration_line()
 
     def declaration_line(self) :
+        
         if self.token.recognized_string == "#declare":
             self.token = self.get_token() 
             self.idlist()
@@ -722,17 +853,27 @@ class Syntax_Analyzer :
             sys.exit("Invalid while syntax! \n '(' expected!")
 
 
+    # Prepei me kapoio tropo na kseroume an klhthke apo synarthsh h apo declare wste na kseroume an einai 
+    # aplo Variable h einai Parameters -> Formal Parameters klp
     def idlist(self) :
+        global standard_offset
         if self.token.family in keyword :
             sys.exit("Invalid variable name in idlist syntax! \n Variable name should not be a keyword!")
 
         elif self.token.family == "Alphabetical":
+            self.symbol_table.addEntityTable(self.token.recognized_string, "Variable")
+            self.symbol_table.updateFields(ent_name = self.token.recognized_string, offset = standard_offset)
+            standard_offset += 4
+            print("Scope sthn id list : ", self.symbol_table.level)
             self.token = self.get_token()
             while self.token.recognized_string == "," :
                 self.token = self.get_token()
                 if self.token.recognized_string in keyword :
                     sys.exit("Invalid variable name in idlist syntax! \n Variable name should not be a keyword!")        
                 if self.token.family == "Alphabetical" :
+                    self.symbol_table.addEntityTable(self.token.recognized_string, "Variable")
+                    self.symbol_table.updateFields(ent_name = self.token.recognized_string, offset = standard_offset)
+                    standard_offset += 4
                     self.token = self.get_token()
                 else :
                     sys.exit("Invalid kleene star in idlist syntax! \n ID expected after comma!")
