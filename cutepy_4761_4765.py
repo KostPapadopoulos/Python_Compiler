@@ -406,6 +406,7 @@ class SymbolicConstant(Entity) :
 class Scope :
     def __init__(self, level) -> None:
         self.level = level
+        self.standard_offset = 12
         self.entities : list[Entity] = []
         
     def addEntityScope(self, entity) :
@@ -424,7 +425,6 @@ class Table :
     def getCurrentScope(self) -> Scope :
         return self.scopes[-1]
     
-    # Den xreiazetai na pairnoume san orisma to cuurent scope afoy exoyme to pedio ths klashs level poy to akoloythei
     def addScope(self) :
         self.level += 1
         new_scope = Scope(self.level)
@@ -447,6 +447,9 @@ class Table :
             new_var = FormalParameter(ent_name, "Integer", None)
         elif ent_type == "Function" :
             new_var = Function(ent_name, "Integer", None, None, None)
+        elif ent_type == "TempVariable" :
+            new_var = TemporaryVariable(ent_name, "Integer", None)
+            print("Created temp Variable!")
         else :
             ValueError("Invalid entity type!")
 
@@ -482,8 +485,6 @@ class Table :
         
 
 class Syntax_Analyzer :
-    global standard_offset
-    standard_offset = 12
     current_line = 0
     input_file = ""
     output_code = ""
@@ -502,22 +503,31 @@ class Syntax_Analyzer :
         self.token = self.my_lex.analyze()
         return self.token
     
-    def write_to_file(self, counter : int, quad : Quad) :
+    def write_quad_to_file(self, counter : int, quad : Quad) :
         result = str(counter) + ": " + quad.operator + " " + str(quad.oper1) + " " + str(quad.oper2) + " " + str(quad.oper3) + "\n"
         return result
     
-    def delete_last_line(self, s):
-        lines = s.split('\n')
-        if len(lines) > 1:
-            del lines[-2]
-        return '\n'.join(lines)
+    def write_symbol_to_file(self, level : int) :
+        if (self.symbol_table.scopes[level].entities[0].name.startswith("main")) :
+            result = "\nScope: " + str(level) + " " + self.symbol_table.scopes[level].entities[0].name + "\n\n"
+        else :
+            result = "\nScope: " + str(level)  + " " + str(self.symbol_table.scopes[level - 1].entities[-1].name) + "\n\n" 
+        for entity in self.symbol_table.scopes[level].entities :
+            if (type(entity) == Variable):
+                result += "\tVariable: " + entity.name + "," + " " + "Offset: " + str(entity.offset) + "\n"
+            if (type(entity) == Function):
+                result += "\tFunction: " + entity.name + " " + "Starting quad: " + str(entity.starting_quad) + " " + "Frame length: " + str(entity.frame_length) + "\n"
+                #for string in entity.formal_parameters :
+                #    result += "\t \u2192 Formal Parameter: " + string + "\n"
+            if (type(entity) == TemporaryVariable):
+                result += "\tTemp Variable : " + entity.name + " " + "Offset: " + str(entity.offset) + "\n"
+        
+        return result
 
     def start_rule(self) :
-        global level
         print("Compiling code...")
         print("-------------------------------------------------------------------------------------------------------------------------------------")
         self.token = self.get_token()
-        #self.symbol_table.addScope(self.)
         if  self.token.recognized_string == "def" :
             self.def_main_part() 
             if self.token.recognized_string == "if" :
@@ -543,6 +553,7 @@ class Syntax_Analyzer :
         if self.token.family == "Alphabetical" :
             main_name = self.token.recognized_string
             self.token = self.get_token()
+            self.symbol_table.addEntityTable(main_name, "Function")
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
                 if self.token.recognized_string == ")" :
@@ -581,15 +592,21 @@ class Syntax_Analyzer :
         if self.token.family == "Alphabetical" :
             global func_name
             func_name = self.token.recognized_string 
+            print(func_name)
             self.symbol_table.addEntityTable(func_name, "Function")
             # Douleuei to na prosthetome sto current scope to onοma ths synarthshs
             self.symbol_table.addScope()
-            allo_scope = self.symbol_table.getCurrentScope()
-            print("New scope sthn function " ,allo_scope.level)
             self.token = self.get_token()
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
                 self.idlist()
+                global id_list_name
+                result_list = id_list_name.split(",")
+                for value in result_list :
+                    self.symbol_table.addEntityTable(value, "FormalParameter")
+                    self.symbol_table.updateFields(ent_name= value, offset= self.symbol_table.getCurrentScope().standard_offset)
+                    self.symbol_table.getCurrentScope().standard_offset += 4
+                self.symbol_table.updateFields(ent_name= func_name, formal_parameters= result_list)
                 if self.token.recognized_string == ")" :
                     self.token = self.get_token()
                     if self.token.recognized_string == ":" :
@@ -602,6 +619,7 @@ class Syntax_Analyzer :
                                 self.def_function()
                             self.inter_code.genQuad("begin_block", func_name, "_","_")
                             self.statements()
+
                             if self.token.recognized_string == "#}" :
                                 self.inter_code.genQuad("end_block", func_name, "_","_")
                                 self.token = self.get_token()
@@ -623,10 +641,15 @@ class Syntax_Analyzer :
             self.declaration_line()
 
     def declaration_line(self) :
-        
+        global id_list_name
         if self.token.recognized_string == "#declare":
             self.token = self.get_token() 
             self.idlist()
+            result_list = id_list_name.split(",")
+            for value in result_list :
+                self.symbol_table.addEntityTable(value, "Variable")
+                self.symbol_table.updateFields(ent_name = value, offset = self.symbol_table.getCurrentScope().standard_offset)
+                self.symbol_table.getCurrentScope().standard_offset += 4
         else :
             sys.exit("Invalid declaration syntax inside declaration line!")
         
@@ -669,6 +692,10 @@ class Syntax_Analyzer :
 
     def assignement_stat(self) :
         id = self.token.recognized_string
+        #Adding variable to Symbol Table
+        self.symbol_table.addEntityTable(id, "Variable")
+        self.symbol_table.updateFields(ent_name= id, offset = self.symbol_table.getCurrentScope().standard_offset)
+        self.symbol_table.getCurrentScope().standard_offset += 4
         self.token = self.get_token()
         if self.token.recognized_string == "=" :
             self.token = self.get_token()
@@ -677,6 +704,7 @@ class Syntax_Analyzer :
                 if self.token.recognized_string == "(" :
                     self.token = self.get_token()
                     if self.token.recognized_string == "input" :
+                        # Creation of a new Quad for Intermediate Code
                         self.inter_code.genQuad("inp", "_", "_", id)
                         self.token = self.get_token()
                         if self.token.recognized_string == "(" :
@@ -710,7 +738,7 @@ class Syntax_Analyzer :
                 
         
     def print_stat(self) :
-        global func_name ,w
+        global func_name ,w, new_list
         self.token = self.get_token()
         if self.token.recognized_string == "(" :
             self.token = self.get_token()
@@ -718,11 +746,7 @@ class Syntax_Analyzer :
             if self.token.recognized_string == ")" :
                 self.token = self.get_token()
                 if self.token.recognized_string == ";" :
-                    if len(func_name) != 0 :
-                        self.inter_code.genQuad("out", w, "_", "_")
-                        func_name = ""
-                    else :
-                        self.inter_code.genQuad("out", new_list[0], "_", "_")
+                    self.inter_code.genQuad("out", new_list[0], "_", "_")
                     self.token = self.get_token()
                 else :
                     sys.exit("Invalid print statement syntax! \n ';' expected!")
@@ -854,26 +878,22 @@ class Syntax_Analyzer :
 
 
     # Prepei me kapoio tropo na kseroume an klhthke apo synarthsh h apo declare wste na kseroume an einai 
-    # aplo Variable h einai Parameters -> Formal Parameters klp
+    # aplo Variable h einai Parameters -> Formal Parameters klp 
     def idlist(self) :
-        global standard_offset
         if self.token.family in keyword :
             sys.exit("Invalid variable name in idlist syntax! \n Variable name should not be a keyword!")
 
         elif self.token.family == "Alphabetical":
-            self.symbol_table.addEntityTable(self.token.recognized_string, "Variable")
-            self.symbol_table.updateFields(ent_name = self.token.recognized_string, offset = standard_offset)
-            standard_offset += 4
-            print("Scope sthn id list : ", self.symbol_table.level)
+            global id_list_name 
+            id_list_name = self.token.recognized_string
             self.token = self.get_token()
             while self.token.recognized_string == "," :
+                id_list_name += self.token.recognized_string
                 self.token = self.get_token()
                 if self.token.recognized_string in keyword :
                     sys.exit("Invalid variable name in idlist syntax! \n Variable name should not be a keyword!")        
                 if self.token.family == "Alphabetical" :
-                    self.symbol_table.addEntityTable(self.token.recognized_string, "Variable")
-                    self.symbol_table.updateFields(ent_name = self.token.recognized_string, offset = standard_offset)
-                    standard_offset += 4
+                    id_list_name += self.token.recognized_string
                     self.token = self.get_token()
                 else :
                     sys.exit("Invalid kleene star in idlist syntax! \n ID expected after comma!")
@@ -890,6 +910,9 @@ class Syntax_Analyzer :
             self.token = self.get_token()
             self.term()
             w = self.inter_code.newTemp(IntermediateCode)
+            self.symbol_table.addEntityTable(w, "TempVariable")
+            self.symbol_table.updateFields(ent_name= w, offset= self.symbol_table.getCurrentScope().standard_offset)
+            self.symbol_table.getCurrentScope().standard_offset += 4
             self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
             new_list[0] = w
 
@@ -903,6 +926,10 @@ class Syntax_Analyzer :
             w = self.inter_code.newTemp(IntermediateCode)
             self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
             new_list[0] = w
+            # Adding the newly created Temp Variable to Symbol Table
+            self.symbol_table.addEntityTable(w, "TempVariable")
+            self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
+            self.symbol_table.getCurrentScope().standard_offset += 4
 
     def factor(self) :
         global func_name
@@ -948,11 +975,17 @@ class Syntax_Analyzer :
             while self.token.recognized_string == "," :
                 self.token = self.get_token()
                 self.expression()
+                # Generating newQuads in order to fill the Intermediate Code 
                 self.inter_code.genQuad("par", new_list[0], "CV", "_")
                 w = self.inter_code.newTemp(IntermediateCode)
                 self.inter_code.genQuad("par", w, "RET", "_")
                 self.inter_code.genQuad("call", "_", "_", func_name)
                 self.inter_code.genQuad("retv", w, "_", "_")
+                new_list[0] = w
+                # Adding the newly created Temp Variable to Symbol Table
+                self.symbol_table.addEntityTable(w, "TempVariable")
+                self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
+                self.symbol_table.getCurrentScope().standard_offset += 4
                 
           
     def optional_sign(self) :
@@ -1064,9 +1097,14 @@ class Syntax_Analyzer :
                     self.token = self.get_token()
                     if self.token.recognized_string == "End Of File" :
                         for count, quad in self.inter_code.quad_pointer.pointerHashMap.items() :
-                            self.output_code += self.write_to_file(count , quad)
-                        with open("intermediate_code.int", "w") as f :
-                            f.write(self.output_code)                
+                            self.output_code += self.write_quad_to_file(count , quad)
+                        with open("intermediate_code.int", "w") as f , open("symbol_table.txt", "w") as g :
+                            f.write(self.output_code)    
+                            print("Running second with open")
+                            print( len(self.symbol_table.scopes))
+                            for i in range (len(self.symbol_table.scopes) - 1, -1, -1) :
+                                out = self.write_symbol_to_file(i)
+                                g.write(out)
                         print("-------------------------------------------------------------------------------------------------------------------------------------")
                         sys.exit("Compilation completed successfully!")
                     else :
