@@ -324,6 +324,7 @@ class QuadPointer :
     def get_Quad(self, quad_counter) :
         return self.pointerHashMap[quad_counter]
 
+
 class IntermediateCode :
     counter = 0 
 
@@ -337,7 +338,6 @@ class IntermediateCode :
         self.quad_pointer.addToHashMap(quadCounter, newQuad)
     
     def backPatch(self, listOfQuad, nextLabel) :
-        #for count in listOfQuad[0] :
         the_quad = self.quad_pointer.get_Quad(listOfQuad[0])
         the_quad.oper3 = nextLabel
 
@@ -360,15 +360,18 @@ class IntermediateCode :
         extendedList = list1 + list2
         return extendedList
     
+
 class Entity(ABC) :
     def __init__(self, name) -> None:
         self.name = name
+
 
 class Variable(Entity) :
     def __init__(self, name, datatype, offset) -> None :
         super().__init__(name)
         self.datatype = datatype
         self.offset = offset
+
 
 class FormalParameter(Entity) : 
     def __init__(self, name, datatype, mode) -> None:
@@ -377,11 +380,12 @@ class FormalParameter(Entity) :
         self.mode = mode
 
 
-class Parameter(Variable, FormalParameter) :
+class Parameter(Variable) :
 
-    def __init__(self, name, datatype, mode, offset) -> None:
+    def __init__(self, name, datatype, offset, mode) -> None:
         Variable.__init__(self, name, datatype, offset)
-        FormalParameter.__init__(self, name, datatype, mode)
+        self.mode = mode
+
 
 class Function : 
 
@@ -397,12 +401,14 @@ class TemporaryVariable(Variable) :
     def __init__(self, name, datatype, offset) -> None:
         super().__init__(name, datatype, offset)
         
+
 class SymbolicConstant(Entity) :
     def __init__(self, name, datatype, value) -> None:
         super().__init__(name)
         self.datatype = datatype
         self.value = value
         
+
 class Scope :
     def __init__(self, level) -> None:
         self.level = level
@@ -428,43 +434,26 @@ class Table :
         new_scope = Scope(self.level)
         self.scopes.append(new_scope)
         
-
     def deleteScope(self, level) :
         for scope in self.scopes :
             if scope.level == level :
                 self.scopes.remove(scope)
                 self.level -= 1
-        
 
     def addEntityTable(self, ent_name : str, ent_type) :
         if ent_type == "Variable" :
             new_var = Variable(ent_name, "Integer", None)
-            print("Variable sto add entitny")
-            print(type(new_var))
-        elif ent_type == "FormalParameter" :
-            new_var = FormalParameter(ent_name, "Integer", "CV")
-            #scope = self.level -1
-            #self.scopes[scope].addEntityScope(new_var)
         elif ent_type == "Function" :
             formal_parameters  = []
             new_var = Function(ent_name, "Integer", None, None, formal_parameters)
-            print(new_var.name)
-            print("TYPE MESA STO ADD ENTITIY")
-            print(type(new_var))
         elif ent_type == "TempVariable" :
             new_var = TemporaryVariable(ent_name, "Integer", None)
-        elif ent_name == "Parameter" :
-            new_var = Parameter(ent_name, "Integer", "CV", None)
-            
+        elif ent_type == "Parameter" :
+            new_var = Parameter(ent_name, "Integer", 0, "CV")
         else :
             ValueError("Invalid entity type!")
-
         self.getCurrentScope().addEntityScope(new_var)
-       
-        # Den typonontai ta formal parameters
-        # Den exoyme brei tropo na kanoyme copy ta formal parameters se antikeimena typoy Parameter
-        # Prepei na broume pws ypologizoyme to frame length 
-
+     
     def updateFields(self, ent_name, datatype = None, offset = None, starting_quad = None, frame_length = None, mode = None) :
         if starting_quad is not None or frame_length is not None :
             if ent_name.startswith("main") :
@@ -491,11 +480,11 @@ class Table :
                         self.getCurrentScope().entities[i].offset = offset
                     if mode is not None :
                         self.getCurrentScope().entities[i].mode = mode
-                
 
     def addFormalParameter(self, parameter) :
+       new_formal = FormalParameter(parameter, "Integer", "CV")
        func_scope = self.getCurrentScope().level - 1
-       self.scopes[func_scope].entities[-1].formal_parameters.append(parameter)
+       self.scopes[func_scope].entities[-1].formal_parameters.append(new_formal)
             
     def searchForEntry(self, ent_name) :
         for i in range(self.level, -1, -1) :
@@ -504,7 +493,6 @@ class Table :
                     if ent_name == current_scope.entities[j].name :
                         return "Found : " +  current_scope.entities[j].name 
         return ("Not found!")
-        
 
 class Syntax_Analyzer :
     global out_str 
@@ -522,7 +510,6 @@ class Syntax_Analyzer :
         self.my_lex = lexical_analyzer
         self.token = Token(None, 0, None)    
 
-
     def get_token(self) :
         self.token = self.my_lex.analyze()
         return self.token
@@ -533,7 +520,6 @@ class Syntax_Analyzer :
     
     def write_symbol_to_file(self, level : int) :
         if (self.symbol_table.scopes[level].entities[0].name.startswith("main")) :
-            print("Is main :" + "\t" + self.symbol_table.scopes[level].entities[0].name)
             result = "\nScope: " + str(level) + "\t" + self.symbol_table.scopes[level].entities[0].name + "\n"
         else :
             result = "\nScope: " + str(level)  + "\t" + str(self.symbol_table.scopes[level - 1].entities[-1].name) + "\n" 
@@ -541,7 +527,7 @@ class Syntax_Analyzer :
             if (type(entity) == Variable):
                 result += "\tVariable: " + entity.name + "\t\t" + "Offset: " + str(entity.offset) + "\n"
             if (type(entity) == Parameter) :
-                result += "\tParameter: " + entity.name + "\t\t" + "Offset: " + str(entity.offset) + "\t\t" + "mode: " + entity.mode + "\n"
+                result += "\tParameter: " + entity.name + "\t\t" + "Offset: " + str(entity.offset) + "\t\t" + "mode: " + str(entity.mode) + "\n"
             if (type(entity) == Function):
                 result += "\tFunction: " + entity.name + "\t\t" + "Starting quad: " + str(entity.starting_quad) + "\t\t" + "Frame length:" + "\t" + str(entity.frame_length) + "\n"
                 for formal in entity.formal_parameters :
@@ -571,7 +557,6 @@ class Syntax_Analyzer :
             self.token = self.get_token()
             self.def_main_function()
 
-
     def def_main_function(self) :
         global quadCounter
         if self.token.recognized_string in keyword :
@@ -580,6 +565,8 @@ class Syntax_Analyzer :
         if self.token.family == "Alphabetical" :
             global out_str
             main_name = self.token.recognized_string
+            if len(self.symbol_table.scopes) == 0 :
+                self.symbol_table.addScope()
             out_str += "\nCreated Scope: " + str(self.symbol_table.level) + "\t" + main_name + "\n"
             self.token = self.get_token()
             self.symbol_table.addEntityTable(main_name, "Function")
@@ -599,10 +586,15 @@ class Syntax_Analyzer :
                             self.inter_code.genQuad("begin_block",main_name, "_","_")
                             self.statements()
                             if self.token.recognized_string == "#}" :
+                                for entity in reversed(self.symbol_table.scopes[self.symbol_table.level].entities) :
+                                    if (type(entity) != Function) :
+                                        main_frame_length = entity.offset +  4
+                                        break
+                                self.symbol_table.updateFields(ent_name = main_name, frame_length = main_frame_length)
                                 self.inter_code.genQuad("halt", "_", "_", "_")
                                 self.inter_code.genQuad("end_block",main_name, "_","_")
                                 out_str += self.write_symbol_to_file(self.symbol_table.level)
-                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + "\t" + main_name + ". Function ended! \n"
+                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + " " + main_name + ". Function ended! \n"
                                 self.symbol_table.deleteScope(self.symbol_table.level)
                                 self.token = self.get_token()
                             else :
@@ -618,7 +610,6 @@ class Syntax_Analyzer :
         else :
             sys.exit("Invalid definition of main function! \n Main functions should start with a letter!")                    
 
-
     def def_function(self) :
         global func_name, out_str
         if self.token.recognized_string in keyword :
@@ -626,9 +617,6 @@ class Syntax_Analyzer :
         if self.token.family == "Alphabetical" :
             func_name = self.token.recognized_string 
             self.symbol_table.addEntityTable(func_name, "Function")
-            print("ENTITY PINAKAS")
-            print(self.symbol_table.getCurrentScope().entities[-1].name)
-            print(type(self.symbol_table.getCurrentScope().entities[-1]))
             self.symbol_table.addScope()
             out_str += "\nCreated Scope: " + str(self.symbol_table.level) + "\t" + func_name + "\n"
             self.token = self.get_token()
@@ -638,9 +626,10 @@ class Syntax_Analyzer :
                 global id_list_name
                 result_list = id_list_name.split(",")
                 for value in result_list :
-                    self.symbol_table.addEntityTable(value, "FormalParameter")
-                    self.symbol_table.addFormalParameter(self.symbol_table.getCurrentScope().entities[-1])
-                    print(str(self.symbol_table.getCurrentScope().level))
+                    self.symbol_table.addEntityTable(value, "Parameter")
+                    self.symbol_table.updateFields(ent_name= value, offset= self.symbol_table.getCurrentScope().standard_offset)
+                    self.symbol_table.getCurrentScope().standard_offset += 4
+                    self.symbol_table.addFormalParameter(value)
                 if self.token.recognized_string == ")" :
                     self.token = self.get_token()
                     if self.token.recognized_string == ":" :
@@ -651,15 +640,18 @@ class Syntax_Analyzer :
                             while self.token.recognized_string == "def" :
                                 self.token = self.get_token()
                                 self.def_function()
-                            print(func_name)
                             self.symbol_table.updateFields(ent_name = func_name, starting_quad = self.inter_code.nextQuad())
                             self.inter_code.genQuad("begin_block", func_name, "_","_")
                             self.statements()
-
                             if self.token.recognized_string == "#}" :
-                                self.inter_code.genQuad("end_block", func_name, "_","_")
+                                for entity in reversed(self.symbol_table.scopes[self.symbol_table.level].entities) :
+                                    if (type(entity) != Function) :
+                                        frame_length =  entity.offset + 4
+                                        break
+                                self.symbol_table.updateFields(ent_name = func_name, frame_length = frame_length)
+                                self.inter_code.genQuad("end_block", func_name, "_","_") 
                                 out_str += self.write_symbol_to_file(self.symbol_table.level)
-                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + "\t" + func_name + ". Function ended!\n"
+                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + " " + func_name + ". Function ended!\n"
                                 self.symbol_table.deleteScope(self.symbol_table.level)
                                 self.token = self.get_token()
                             else :
@@ -699,14 +691,12 @@ class Syntax_Analyzer :
             self.simple_statement()
         else :
             sys.exit("Invalid statement syntax! \n Expected either a simple or a structured statement!")
-        
 
     def statements(self) :
         self.statement()
         while self.token.recognized_string == "if" or self.token.recognized_string == "while" or self.token.recognized_string == "print" or self.token.recognized_string == "return" or self.token.family == "Alphabetical"  :
             self.statement()
         
-
     def simple_statement(self) :
         if self.token.recognized_string == "print" :
             self.print_stat()
@@ -720,7 +710,6 @@ class Syntax_Analyzer :
         else :
             sys.exit("Invalid simple statement syntax!")
 
-
     def structured_statement(self) :
         if self.token.recognized_string == "if" :
             self.if_stat()
@@ -732,10 +721,13 @@ class Syntax_Analyzer :
     def assignement_stat(self) :
         global out_str
         id = self.token.recognized_string
-        #Adding variable to Symbol Table
-        self.symbol_table.addEntityTable(id, "Variable")
-        self.symbol_table.updateFields(ent_name = id, offset = self.symbol_table.getCurrentScope().standard_offset)
-        self.symbol_table.getCurrentScope().standard_offset += 4
+        name_list = []
+        for ent in self.symbol_table.getCurrentScope().entities :
+            name_list.append(ent.name)
+        if id not in name_list:
+            self.symbol_table.addEntityTable(id, "Variable")
+            self.symbol_table.updateFields(ent_name = id, offset = self.symbol_table.getCurrentScope().standard_offset)
+            self.symbol_table.getCurrentScope().standard_offset += 4
         self.token = self.get_token()
         if self.token.recognized_string == "=" :
             self.token = self.get_token()
@@ -744,7 +736,6 @@ class Syntax_Analyzer :
                 if self.token.recognized_string == "(" :
                     self.token = self.get_token()
                     if self.token.recognized_string == "input" :
-                        # Creation of a new Quad for Intermediate Code
                         self.inter_code.genQuad("inp", "_", "_", id)
                         self.token = self.get_token()
                         if self.token.recognized_string == "(" :
@@ -775,7 +766,6 @@ class Syntax_Analyzer :
                 self.token = self.get_token()
         else :
             sys.exit("Invalid simple statement syntax!")
-                
         
     def print_stat(self) :
         global new_list
@@ -794,7 +784,6 @@ class Syntax_Analyzer :
                 sys.exit("Invalid print statement syntax! \n ')' expected!")
         else :
             sys.exit("Invalid print statement syntax! \n '(' expected!")
-        
 
     def return_stat(self) :
         self.token = self.get_token()
@@ -847,7 +836,6 @@ class Syntax_Analyzer :
                                             self.token = self.get_token()
                                         else :
                                             sys.exit("Invalid else syntax! \n '#}' expected!")
-
                                     else :
                                         self.statement()
                                     self.inter_code.backPatch(if_true_list, self.inter_code.nextQuad())
@@ -855,8 +843,6 @@ class Syntax_Analyzer :
                                     sys.exit("Invalid else syntax! \n ':' expected!")                                
                             else :
                                 pass
-                            
-                            
                         else :
                             sys.exit("Invalid if syntax! \n '#}' expected!")
                     else :
@@ -915,10 +901,7 @@ class Syntax_Analyzer :
                 sys.exit("3:Invalid while syntax! \n ')' expected!")
         else :
             sys.exit("Invalid while syntax! \n '(' expected!")
-
-
-    # Prepei me kapoio tropo na kseroume an klhthke apo synarthsh h apo declare wste na kseroume an einai 
-    # aplo Variable h einai Parameters -> Formal Parameters klp 
+ 
     def idlist(self) :
         if self.token.family in keyword :
             sys.exit("Invalid variable name in idlist syntax! \n Variable name should not be a keyword!")
@@ -956,7 +939,6 @@ class Syntax_Analyzer :
             self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
             new_list[0] = w
 
-
     def term(self) :
         global out_str
         self.factor()
@@ -967,7 +949,6 @@ class Syntax_Analyzer :
             w = self.inter_code.newTemp(IntermediateCode)
             self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
             new_list[0] = w
-            # Adding the newly created Temp Variable to Symbol Table
             self.symbol_table.addEntityTable(w, "TempVariable")
             self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
             self.symbol_table.getCurrentScope().standard_offset += 4
@@ -1001,7 +982,6 @@ class Syntax_Analyzer :
                 self.token = self.get_token()
             else :
                 sys.exit("Invalid syntax of idtail! \n ')' expected!")
-            
         else :
             pass
 
@@ -1015,24 +995,20 @@ class Syntax_Analyzer :
             while self.token.recognized_string == "," :
                 self.token = self.get_token()
                 self.expression()
-                # Generating newQuads in order to fill the Intermediate Code 
                 self.inter_code.genQuad("par", new_list[0], "CV", "_")
                 w = self.inter_code.newTemp(IntermediateCode)
                 self.inter_code.genQuad("par", w, "RET", "_")
                 self.inter_code.genQuad("call", "_", "_", func_name)
                 self.inter_code.genQuad("retv", w, "_", "_")
                 new_list[0] = w
-                # Adding the newly created Temp Variable to Symbol Table
                 self.symbol_table.addEntityTable(w, "TempVariable")
                 self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
                 self.symbol_table.getCurrentScope().standard_offset += 4
-                
           
     def optional_sign(self) :
         if self.token.family == "AddOper" :
             new_list.append(self.token.recognized_string)
             self.token = self.get_token()
-
         else :
             pass
         
@@ -1051,7 +1027,6 @@ class Syntax_Analyzer :
     def bool_factor(self) : 
         if self.token.recognized_string == "not" :
             self.token = self.get_token() 
-
             if self.token.recognized_string == "[" :
                 self.token = self.get_token() 
                 self.condition()
@@ -1059,7 +1034,6 @@ class Syntax_Analyzer :
                     self.token = self.get_token()                 
                 else :
                     sys.exit("Invalid syntax in boolean factor! \n ']' expected'!")
-                
             else :
                 sys.exit("Invalid syntax in boolean factor! \n '[' expected'!")
 
@@ -1070,7 +1044,7 @@ class Syntax_Analyzer :
                     self.token = self.get_token()                 
                 else :
                     sys.exit("Invalid syntax in boolean factor! \n ']' expected'!")
-            
+        
         else  :
             self.expression()
             if self.token.family == "RelOp" :
@@ -1079,7 +1053,6 @@ class Syntax_Analyzer :
                 self.token = self.get_token() 
                 self.expression()
                 self.inter_code.genQuad(operator, first_new_list[0], new_list[0], quadCounter + 2)
-                
             else :
                 sys.exit("Invalid boolean factor syntax! \n Expected a relational operator")
     
