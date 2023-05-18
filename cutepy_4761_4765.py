@@ -3,7 +3,7 @@
 
 
 import sys
-from abc import ABC,abstractmethod
+from abc import ABC
 
 quadCounter = 0
 
@@ -47,8 +47,7 @@ class Lex :
                             state = 0
                             self.point_char += 1
                             if char == '\n' :
-                                self.current_line += 1
-                                 
+                                self.current_line += 1         
 
                         elif char.isalpha() :
                             self.point_char += 1
@@ -381,14 +380,12 @@ class FormalParameter(Entity) :
 
 
 class Parameter(Variable) :
-
     def __init__(self, name, datatype, offset, mode) -> None:
         Variable.__init__(self, name, datatype, offset)
         self.mode = mode
 
 
 class Function : 
-
     def __init__(self, name, datatype, starting_quad, frame_length, formal_parameters : list) -> None:
         self.name = name
         self.datatype = datatype
@@ -420,7 +417,6 @@ class Scope :
 
 
 class Table :
-
     def __init__(self) :
         self.level = 0    
         self.first_scope = Scope(self.level)
@@ -491,8 +487,42 @@ class Table :
             current_scope = self.scopes[i]    
             for j in range(len(current_scope.entities) - 1 , - 1, - 1) :    
                     if ent_name == current_scope.entities[j].name :
-                        return "Found : " +  current_scope.entities[j].name 
+                        return  current_scope.entities[j].name + " " + str(current_scope.level) + " " + str(current_scope.entities[j].offset)
         return ("Not found!")
+
+
+class FinalCode :
+
+    def __init__(self, table : Table ) -> None:
+        self.symb_table = table
+        self.final_code_res = ""
+
+
+    def produce(self, str) :
+        with open("final_code.asm","a") as append:
+            append.write(str)
+
+
+    def gnlvcode(self, variable) -> str :
+        res = ""
+        res = self.symb_table.searchForEntry(variable)
+        words = res.split()
+        level = words[1]
+        offset = words[2]
+        t = 0
+        res += "lw t0, -8(sp) \n"
+        while (t < (self.symb_table.getCurrentScope().level) - level) :
+            res += "lw t0, -8(t0) \n"
+            t += 1 
+        res += "addi t0, t0, " + "-" + str(offset) + "\n"
+        return res
+
+
+
+    def loadvr(self, variable, register) :
+
+    def storerv() :
+
 
 class Syntax_Analyzer :
     global out_str 
