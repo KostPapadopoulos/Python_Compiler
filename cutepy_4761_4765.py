@@ -370,6 +370,7 @@ class Variable(Entity) :
         super().__init__(name)
         self.datatype = datatype
         self.offset = offset
+        self.type = "Variable"
 
 
 class FormalParameter(Entity) : 
@@ -377,12 +378,14 @@ class FormalParameter(Entity) :
         super().__init__(name)
         self.datatype = datatype
         self.mode = mode
+        self.type = "FormalParameter"
 
 
 class Parameter(Variable) :
     def __init__(self, name, datatype, offset, mode) -> None:
         Variable.__init__(self, name, datatype, offset)
         self.mode = mode
+        self.type = "Parameter"
 
 
 class Function : 
@@ -392,11 +395,13 @@ class Function :
         self.starting_quad = starting_quad
         self.frame_length = frame_length
         self.formal_parameters : list = formal_parameters
+        
 
 
 class TemporaryVariable(Variable) :
     def __init__(self, name, datatype, offset) -> None:
         super().__init__(name, datatype, offset)
+        self.type = "TemporaryVariable"
         
 
 class SymbolicConstant(Entity) :
@@ -438,7 +443,7 @@ class Table :
 
     def addEntityTable(self, ent_name : str, ent_type) :
         if ent_type == "Variable" :
-            new_var = Variable(ent_name, "Integer", None)
+            new_var = Variable(ent_name, "Integer", None,)
         elif ent_type == "Function" :
             formal_parameters  = []
             new_var = Function(ent_name, "Integer", None, None, formal_parameters)
@@ -487,43 +492,112 @@ class Table :
             current_scope = self.scopes[i]    
             for j in range(len(current_scope.entities) - 1 , - 1, - 1) :    
                     if ent_name == current_scope.entities[j].name :
-                        return  current_scope.entities[j].name + " " + str(current_scope.level) + " " + str(current_scope.entities[j].offset)
+                        return  current_scope.entities[j].name + " " + str(current_scope.level) + " " + str(current_scope.entities[j].offset) + " " + current_scope.entities[j].type
         return ("Not found!")
 
 
 class FinalCode :
+    global words
 
     def __init__(self, table : Table ) -> None:
         self.symb_table = table
         self.final_code_res = ""
 
 
-    def produce(self, str) :
+    def produce(self, str_inp) :
         with open("final_code.asm","a") as append:
-            append.write(str)
+            append.write(str_inp)
 
 
     def gnlvcode(self, variable) -> str :
+        global words
         res = ""
         res = self.symb_table.searchForEntry(variable)
         words = res.split()
         level = words[1]
         offset = words[2]
         t = 0
-        res += "lw t0, -8(sp) \n"
+        self.produce("\tlw t0,-4(sp) \n")
         while (t < (self.symb_table.getCurrentScope().level) - level) :
-            res += "lw t0, -8(t0) \n"
+            self.produce("\tlw t0,-4(t0) \n")
             t += 1 
-        res += "addi t0, t0, " + "-" + str(offset) + "\n"
-        return res
+        self.produce("\taddi t0, t0," + "-" + str(offset) + "\n")
 
 
 
     def loadvr(self, variable, register) :
+        if (type(variable) == int) :
+            self.produce("\tli " + register + ", " + variable)
+        else :
+            res = ""
+            res = self.symb_table.searchForEntry(variable)
+            words = res.split()
+            level = words[1]
+            offset = words[2]
+            type_word = words[3]
+            if level == self.symb_table.getCurrentScope().level :
+                self.produce("\tlw " + register + ",-" + offset + "(sp)" + "\n")
+            elif ((level != self.symb_table.getCurrentScope().level) and (type_word =="Parameter" or type_word == "Variable")):
+                self.gnlvcode(variable)
+                self.produce("\tlw " + register + ",(t0)")
+            elif level == 0 :
+                self.produce("\tlw " + register + ",-" + offset +"(gp)")
 
-    def storerv() :
+
+    def storerv(self, register, variable) :
+        res = ""
+        res = self.symb_table.searchForEntry(variable)
+        words = res.split()
+        level = words[1]
+        offset = words[2]
+        type_word = words[3]
+        if level == self.symb_table.getCurrentScope().level :
+            self.produce("\tsw " + register + ",-" + offset + "(sp)" + "\n")
+        elif level == 0 :
+            self.produce("\tsw " + register + ",-" + offset +"(gp)")
+        else :         
+            self.gnlvcode(variable)
+            self.produce("\tsw (t0)," + ",-" + offset + "(sp)")
 
 
+##Ousiastika paragume grammes mesw ton panw entolwn gia kathe periptwsi tetradas apo to genquad
+
+
+
+##ekxwrisi
+
+##loadvr(variable pu exei tin timi otidipote kai an einai, register)
+##storerv(register, target variable)
+
+
+
+##prosthesi/pollaplasiasmos/diairesi z = x oper y
+
+##loadvr(variable pu exei tin prwti timi, register1)
+##loadvr(variable pu exei tin deyteri timi, register2)
+##produce("oper" + register1 + "," + register2 + "," + register1)
+##storerv(register1, target variable)
+
+
+##jump
+
+##produce("j label")
+
+
+
+##logikes ekfraseis assembly (beq, bne klp)
+
+####loadvr(variable pu exei tin prwti timi, register1)
+##loadvr(variable pu exei tin deyteri timi, register2)
+##produce("entoli assembly " + register1 + "," + register2 + ",label")
+
+
+
+## Άρα, η πρώτη εντολή που θα παραχθεί θα είναι μία jump πριν την εκτελεση της πρωτης εντολης που καλειται απ τη main
+## γιατι δεν ξερουμε ποια θα ειναι η πρωτη εντολη της main που θα κληθει
+## αρα ενα jump σε main label
+
+##
 class Syntax_Analyzer :
     global out_str 
     out_str = ""
@@ -534,6 +608,7 @@ class Syntax_Analyzer :
     my_lex = Lex(None,None)
     inter_code = IntermediateCode()
     symbol_table = Table()
+    final_code = FinalCode(symbol_table)
     
     def __init__(self, this_input_file, lexical_analyzer):
         self.input_file = this_input_file
@@ -1111,7 +1186,7 @@ class Syntax_Analyzer :
                                                 self.token = self.get_token()
                                                 self.main_function_call()
                                             print("-------------------------------------------------------------------------------------------------------------------------------------")
-                                            sys.exit("Compilation completed successfully!")
+                                            print("Compilation completed successfully!")
                                         else :
                                             sys.exit("Invalid syntax when calling main part! \n ':' expected!")
                                     else :
@@ -1145,8 +1220,6 @@ class Syntax_Analyzer :
                         with open("intermediate_code.int", "w") as f , open("symbol_table.txt", "w") as g :
                             f.write(self.output_code)    
                             g.write(out_str)
-                        print("-------------------------------------------------------------------------------------------------------------------------------------")
-                        sys.exit("Compilation completed successfully!")
                     else :
                         pass
                 else :
@@ -1155,6 +1228,155 @@ class Syntax_Analyzer :
                 sys.exit("Invalid syntax when calling main function! \n ')' expected!")
         else :
              sys.exit("Invalid syntax when calling main function! \n '(' expected!")
+
+    def createFinalCode(self) :
+        with open ("intermediate_code.int", "r") as int , open("symbol_table.txt", "r") as symb :
+            inter_code_list = int.readlines()
+            smybol_table_list = symb.readlines()
+        self.final_code.produce(".data \nstr_nl: .asciz '\\n' \n.text\n\n\n")
+        self.final_code.produce("L0: \n \tj main\n")
+        for line in inter_code_list:
+            words = line.split()
+            if "begin_block" in words:
+                index = words.index("begin_block")
+                number = words[index-1].rstrip(":")
+                self.final_code.produce("L" + number +":" + " \n \tsw ra,(sp)\n")
+            elif "end_block" in words :
+                index = words.index("end_block")
+                number = words[index-1].rstrip(":")
+                self.final_code.produce("L" + number +":" + " \n \tlw ra,(sp)\n\tjr ra\n")
+
+            elif "halt" in words :
+                index = words.index("halt")
+                number = words[index-1].rstrip(":")
+                self.final_code.produce("L" + number +":" + " \n \tli a0,0\n\tli a7,93\n\tecall\n")
+
+            elif "RET" in words :
+                index = words.index("RET")
+                number = words[index-2].rstrip(":")
+                value = words[index-1]
+                self.final_code.produce("L" + number +":\n")
+                if # DEN BRHKA PARAMETROUS PIO PANW
+                    line_str_func_name = inter_code_list[number]
+                    str_func_name = line_str_func_name.split()
+                    actual_func_name = str_func_name[-1]
+                    for symb_line in smybol_table_list :
+                        if actual_func_name in symb_line :
+                            temp_line = symb_line.split()
+                            frame_length_value = temp_line[-1]
+                            self.final_code.produce("\taddi, fp, sp," + frame_length_value)
+                self.final_code.loadvr(value, "t1")
+                for symb_line in smybol_table_list :
+                    if value in symb_line :
+                        temp_words = symb_line.split()
+                        offset_value = int(temp_words[-1])
+                self.final_code.produce("\taddi t0, sp, -" + offset_value)
+                self.final_code.produce("\tsw t0,-8(fp)\n")    
+
+
+            elif "retv" in words :
+                index = words.index("retv")
+                number = words[index-1].rstrip(":")
+                value = words[index +1]
+                self.final_code.produce("L" + number +":\n")
+                self.final_code.loadvr(value, "t1")
+                self.final_code.produce("\tlw t0,-8(sp)\n")
+                self.final_code.produce("\tsw t1,(t0)\n")
+
+            elif "out" in words :
+                index = words.index("out")
+                number = words[index-1].rstrip(":")
+                value = words[index +1]
+                self.final_code.loadvr(value, "a0")
+                self.final_code.produce("\tli a7,1\n")
+                self.final_code.produce("\tecall\n")
+                self.final_code.produce("\tla a0,str_n\n")
+                self.final_code.produce("\tli a7,4\n")
+                self.final_code.produce("\tecall\n")
+
+
+            elif ":=" in words:
+                index = words.index(":=")
+                Lnumber = words[index-1].rstrip(":")
+                value = words[index + 1]
+                store_value = words[index + 3]
+                self.final_code.produce("L" + Lnumber +":\n" )
+                if value.isdigit() :
+                    self.final_code.loadvr(int(value), "t1")
+                    self.final_code.storerv("t1", store_value)
+                else :
+                    self.final_code.loadvr(value, "t1")
+                    self.final_code.storerv( "t1", store_value)
+
+            elif "+" in words :
+                index = words.index("+")
+                Lnumber = words[index-1].rstrip(":")
+                oper1 = words[index + 1]
+                oper2 = words[index + 2]
+                store_value = words[index + 3]
+                self.final_code.produce("L" + Lnumber +":\n" )
+                if oper1.isdigit() :
+                    self.final_code.loadvr(oper2, "t1")
+                    self.final_code.produce("addi t1, t1," + oper1)
+                    self.final_code.storerv("t1", store_value)
+                elif oper2.isdigit() :
+                    self.final_code.loadvr(oper1, "t1")
+                    self.final_code.produce("addi t1, t1," + oper2)
+                    self.final_code.storerv("t1", store_value)
+
+                else :
+                    self.final_code.loadvr(oper1, "t1")
+                    self.final_code.loadvr(oper2, "t2")
+                    self.final_code.produce("add t2, t2, t1")
+                    self.final_code.storerv( "t2", store_value)
+            
+            elif "-" in words :
+                index = words.index("-")
+                Lnumber = words[index-1].rstrip(":")
+                oper1 = words[index + 1]
+                oper2 = words[index + 2]
+                store_value = words[index + 3]
+                self.final_code.produce("L" + Lnumber +":\n" )
+                if oper1.isdigit() :
+                    self.final_code.loadvr(oper2, "t1")
+                    self.final_code.produce("addi t1, t1,-" + oper1)
+                    self.final_code.storerv("t1", store_value)
+                elif oper2.isdigit() :
+                    self.final_code.loadvr(oper1, "t1")
+                    self.final_code.produce("addi t1, -t1," + oper2)
+                    self.final_code.storerv("t1", store_value)
+
+                else :
+                    self.final_code.loadvr(oper1, "t1")
+                    self.final_code.loadvr(oper2, "t2")
+                    self.final_code.produce("add t2, -t2, t1")
+                    self.final_code.storerv( "t2", store_value)
+
+            elif "*" in words :
+                index = words.index("*")
+                Lnumber = words[index-1].rstrip(":")
+                oper1 = words[index + 1]
+                oper2 = words[index + 2]
+                store_value = words[index + 3]
+                self.final_code.produce("L" + Lnumber +":\n" )
+                self.final_code.loadvr(oper1, "t1")
+                self.final_code.loadvr(oper2, "t2")
+                self.final_code.produce("mul t3, t1, t2")
+                self.final_code.storerv( "t3", store_value)
+            
+            elif "//" in words :
+                index = words.index("//")
+                Lnumber = words[index-1].rstrip(":")
+                oper1 = words[index + 1]
+                oper2 = words[index + 2]
+                store_value = words[index + 3]
+                self.final_code.produce("L" + Lnumber +":\n" )
+                self.final_code.loadvr(oper1, "t1")
+                self.final_code.loadvr(oper2, "t2")
+                self.final_code.produce("div t3, t1, t2")
+                self.final_code.storerv( "t3", store_value)
+
+            
 
 
 if __name__ == '__main__' :
@@ -1165,3 +1387,5 @@ if __name__ == '__main__' :
     my_lex = Lex(input_file,1)
     my_parser = Syntax_Analyzer(input_file, my_lex)
     my_parser.start_rule()
+    my_parser.createFinalCode()
+
