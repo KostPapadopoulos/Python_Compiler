@@ -6,6 +6,7 @@ import sys
 from abc import ABC
 
 quadCounter = 0
+quad_length_list = 1
 
 class Token :
     family_types = ["Alphabetical", "Keyword", "Number", "Underscore", "AddOper", "MulOper", "RelOp", "Assign", "Delimiter", "Group_Symbol", "Comment", "End Of File"]
@@ -329,12 +330,14 @@ class IntermediateCode :
 
     def __init__(self) -> None:
         self.quad_pointer = QuadPointer()
+        self.inter_code_list : list[Quad] = [] 
 
     def genQuad(self, operator, oper1, oper2, oper3) :
         newQuad = Quad(operator, oper1, oper2, oper3)
         global quadCounter 
         quadCounter += 1 
         self.quad_pointer.addToHashMap(quadCounter, newQuad)
+        self.inter_code_list.append(newQuad)
     
     def backPatch(self, listOfQuad, nextLabel) :
         the_quad = self.quad_pointer.get_Quad(listOfQuad[0])
@@ -363,6 +366,7 @@ class IntermediateCode :
 class Entity(ABC) :
     def __init__(self, name) -> None:
         self.name = name
+
 
 
 class Variable(Entity) :
@@ -425,7 +429,7 @@ class Table :
     def __init__(self) :
         self.level = 0    
         self.first_scope = Scope(self.level)
-        self.scopes: list[Scope]= [self.first_scope]         
+        self.scopes: list[Scope]= [self.first_scope]  
     
     def getCurrentScope(self) -> Scope :
         return self.scopes[-1]
@@ -488,13 +492,10 @@ class Table :
        self.scopes[func_scope].entities[-1].formal_parameters.append(new_formal)
             
     def searchForEntry(self, ent_name) :
-        for i in range(self.level, -1, -1) :
-            current_scope = self.scopes[i]    
-            for j in range(len(current_scope.entities) - 1 , - 1, - 1) :    
-                    if ent_name == current_scope.entities[j].name :
-                        return  current_scope.entities[j].name + " " + str(current_scope.level) + " " + str(current_scope.entities[j].offset) + " " + current_scope.entities[j].type
-        return ("Not found!")
-
+        for scope in reversed(self.scopes):
+            for entity in reversed(scope.entities) :
+                    if entity.name == ent_name :
+                        return entity, scope.level  
 
 class FinalCode :
     global words
@@ -509,106 +510,68 @@ class FinalCode :
             append.write(str_inp)
 
 
-    def gnlvcode(self, variable) -> str :
-        global words
-        res = ""
+    def gnlvcode(self, variable):
         res = self.symb_table.searchForEntry(variable)
-        words = res.split()
-        level = words[1]
-        offset = words[2]
-        t = 0
+        entity = res[0]
+        level = res[1]
+        t = 1
         self.produce("\tlw t0,-4(sp) \n")
-        while (t < (self.symb_table.getCurrentScope().level) - level) :
+        while (t < (abs(int(self.symb_table.getCurrentScope().level) - int(level)))) :
             self.produce("\tlw t0,-4(t0) \n")
             t += 1 
-        self.produce("\taddi t0, t0," + "-" + str(offset) + "\n")
+        self.produce("\taddi t0, t0," + "-" + str(entity.offset) + "\n")
 
 
 
-    def loadvr(self, variable, register) :
-        if (type(variable) == int) :
-            self.produce("\tli " + register + ", " + variable)
+    def loadvr(self, variable : str, register) :
+        if (variable.isdigit()) :
+            self.produce("\tli " + register + ", " + variable + "\n")
         else :
-            res = ""
             res = self.symb_table.searchForEntry(variable)
-            words = res.split()
-            level = words[1]
-            offset = words[2]
-            type_word = words[3]
+            entity = res[0]
+            level = res[1]
             if level == self.symb_table.getCurrentScope().level :
-                self.produce("\tlw " + register + ",-" + offset + "(sp)" + "\n")
-            elif ((level != self.symb_table.getCurrentScope().level) and (type_word =="Parameter" or type_word == "Variable")):
+                self.produce("\tlw " + register + ",-" + str(entity.offset) + "(sp)" + "\n")
+            elif ((level != self.symb_table.getCurrentScope().level) and (entity.type =="Parameter:" or entity.type == "Variable:")):
                 self.gnlvcode(variable)
-                self.produce("\tlw " + register + ",(t0)")
+                self.produce("\tlw " + register + ",(t0)\n")
             elif level == 0 :
-                self.produce("\tlw " + register + ",-" + offset +"(gp)")
+                self.produce("\tlw " + register + ",-" + str(entity.offset) +"(gp)\n")
 
 
     def storerv(self, register, variable) :
-        res = ""
         res = self.symb_table.searchForEntry(variable)
-        words = res.split()
-        level = words[1]
-        offset = words[2]
-        type_word = words[3]
+        entity = res[0]
+        level = res[1]
         if level == self.symb_table.getCurrentScope().level :
-            self.produce("\tsw " + register + ",-" + offset + "(sp)" + "\n")
+            self.produce("\tsw " + register + ",-" + str(entity.offset) + "(sp)\n")
         elif level == 0 :
-            self.produce("\tsw " + register + ",-" + offset +"(gp)")
+            self.produce("\tsw " + register + ",-" + str(entity.offset) +"(gp)\n")
         else :         
             self.gnlvcode(variable)
-            self.produce("\tsw (t0)," + ",-" + offset + "(sp)")
+            self.produce("\tsw t0,-" + str(entity.offset) + "(sp)\n")
 
 
-##Ousiastika paragume grammes mesw ton panw entolwn gia kathe periptwsi tetradas apo to genquad
-
-
-
-##ekxwrisi
-
-##loadvr(variable pu exei tin timi otidipote kai an einai, register)
-##storerv(register, target variable)
-
-
-
-##prosthesi/pollaplasiasmos/diairesi z = x oper y
-
-##loadvr(variable pu exei tin prwti timi, register1)
-##loadvr(variable pu exei tin deyteri timi, register2)
-##produce("oper" + register1 + "," + register2 + "," + register1)
-##storerv(register1, target variable)
-
-
-##jump
-
-##produce("j label")
-
-
-
-##logikes ekfraseis assembly (beq, bne klp)
-
-####loadvr(variable pu exei tin prwti timi, register1)
-##loadvr(variable pu exei tin deyteri timi, register2)
-##produce("entoli assembly " + register1 + "," + register2 + ",label")
-
-
-
-## Άρα, η πρώτη εντολή που θα παραχθεί θα είναι μία jump πριν την εκτελεση της πρωτης εντολης που καλειται απ τη main
-## γιατι δεν ξερουμε ποια θα ειναι η πρωτη εντολη της main που θα κληθει
-## αρα ενα jump σε main label
-
-##
 class Syntax_Analyzer :
-    global out_str 
+    global out_str , new_list
+    global func_name_list, id_name
     out_str = ""
+    func_name_list = []
+    id_name = ""
     current_line = 0
     input_file = ""
     output_code = ""
     output_symbol_table = ""
+    keep_line = 0 
+    first_data_entry = True
+    is_inverted = False 
+    func_numbers = 0
+
     my_lex = Lex(None,None)
     inter_code = IntermediateCode()
     symbol_table = Table()
     final_code = FinalCode(symbol_table)
+
     
     def __init__(self, this_input_file, lexical_analyzer):
         self.input_file = this_input_file
@@ -698,8 +661,10 @@ class Syntax_Analyzer :
                                 self.symbol_table.updateFields(ent_name = main_name, frame_length = main_frame_length)
                                 self.inter_code.genQuad("halt", "_", "_", "_")
                                 self.inter_code.genQuad("end_block",main_name, "_","_")
+                                self.createFinalCode(self.keep_line)
                                 out_str += self.write_symbol_to_file(self.symbol_table.level)
                                 out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + " " + main_name + ". Function ended! \n"
+                                
                                 self.symbol_table.deleteScope(self.symbol_table.level)
                                 self.token = self.get_token()
                             else :
@@ -716,14 +681,15 @@ class Syntax_Analyzer :
             sys.exit("Invalid definition of main function! \n Main functions should start with a letter!")                    
 
     def def_function(self) :
-        global func_name, out_str
+        global func_name, out_str, func_name_list
         if self.token.recognized_string in keyword :
             sys.exit("Invalid variable name inside function definition! \n Variable name shouldn't be a keyword!")
         if self.token.family == "Alphabetical" :
             func_name = self.token.recognized_string 
-            self.symbol_table.addEntityTable(func_name, "Function")
+            func_name_list.append(func_name)
+            self.symbol_table.addEntityTable(func_name_list[self.func_numbers], "Function")
             self.symbol_table.addScope()
-            out_str += "\nCreated Scope: " + str(self.symbol_table.level) + "\t" + func_name + "\n"
+            out_str += "\nCreated Scope: " + str(self.symbol_table.level) + "\t" + func_name_list[self.func_numbers] + "\n"
             self.token = self.get_token()
             if self.token.recognized_string == "(" :
                 self.token = self.get_token()
@@ -743,21 +709,24 @@ class Syntax_Analyzer :
                             self.token = self.get_token()
                             self.declarations()
                             while self.token.recognized_string == "def" :
+                                self.func_numbers += 1
                                 self.token = self.get_token()
                                 self.def_function()
-                            self.symbol_table.updateFields(ent_name = func_name, starting_quad = self.inter_code.nextQuad())
-                            self.inter_code.genQuad("begin_block", func_name, "_","_")
+                            self.symbol_table.updateFields(ent_name = func_name_list[self.func_numbers], starting_quad = self.inter_code.nextQuad())
+                            self.inter_code.genQuad("begin_block", func_name_list[self.func_numbers], "_","_")
                             self.statements()
                             if self.token.recognized_string == "#}" :
                                 for entity in reversed(self.symbol_table.scopes[self.symbol_table.level].entities) :
                                     if (type(entity) != Function) :
                                         frame_length =  entity.offset + 4
                                         break
-                                self.symbol_table.updateFields(ent_name = func_name, frame_length = frame_length)
-                                self.inter_code.genQuad("end_block", func_name, "_","_") 
+                                self.symbol_table.updateFields(ent_name = func_name_list[self.func_numbers], frame_length = frame_length)
+                                self.inter_code.genQuad("end_block", func_name_list[self.func_numbers], "_","_") 
+                                self.createFinalCode(self.keep_line)
                                 out_str += self.write_symbol_to_file(self.symbol_table.level)
-                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + " " + func_name + ". Function ended!\n"
+                                out_str += "\nDeleted Scope: " + str(self.symbol_table.level) + " " + func_name_list[self.func_numbers] + ". Function ended!\n"
                                 self.symbol_table.deleteScope(self.symbol_table.level)
+                                self.func_numbers -= 1
                                 self.token = self.get_token()
                             else :
                                 sys.exit("Invalid definition of function! \n '#}' expected!")
@@ -947,11 +916,16 @@ class Syntax_Analyzer :
                                 else :
                                     sys.exit("Invalid else syntax! \n ':' expected!")                                
                             else :
-                                pass
+                                self.inter_code.backPatch(if_true_list, self.inter_code.nextQuad())
                         else :
                             sys.exit("Invalid if syntax! \n '#}' expected!")
                     else :
+                        if_false_list = self.inter_code.makeList(self.inter_code.nextQuad())
+                        self.inter_code.genQuad("jump", "_", "_", "_")
                         self.statement()
+                        if_true_list = self.inter_code.makeList(self.inter_code.nextQuad())
+                        self.inter_code.genQuad("jump", "_", "_", "_")
+                        self.inter_code.backPatch(if_false_list, self.inter_code.nextQuad())
                         if self.token.recognized_string == "else" :
                                 self.token = self.get_token()
                                 if self.token.recognized_string == ":" :
@@ -965,8 +939,10 @@ class Syntax_Analyzer :
                                             sys.exit("Invalid else syntax! \n '#}' expected!")
                                     else :
                                         self.statement()
+                                    
                                 else :
                                     sys.exit("Invalid else syntax! \n ':' expected!")
+                        self.inter_code.backPatch(if_true_list, self.inter_code.nextQuad())
                 else :
                     sys.exit("Invalid if syntax! \n ':' expected!")
             else :
@@ -1041,24 +1017,25 @@ class Syntax_Analyzer :
             self.symbol_table.addEntityTable(w, "TempVariable")
             self.symbol_table.updateFields(ent_name= w, offset= self.symbol_table.getCurrentScope().standard_offset)
             self.symbol_table.getCurrentScope().standard_offset += 4
-            self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
+            self.inter_code.genQuad(operator, new_list[0], new_list[-1], str(w))
             new_list[0] = w
 
     def term(self) :
-        global out_str
+        global out_str, new_list
         self.factor()
         while self.token.family == "MulOper" :
             operator = self.token.recognized_string
             self.token = self.get_token()
             self.factor()
             w = self.inter_code.newTemp(IntermediateCode)
-            self.inter_code.genQuad(operator, new_list[0], new_list[1], str(w))
-            new_list[0] = w
             self.symbol_table.addEntityTable(w, "TempVariable")
             self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
             self.symbol_table.getCurrentScope().standard_offset += 4
+            self.inter_code.genQuad(operator, new_list[0], new_list[-1], str(w))
+            new_list[0] = w
 
     def factor(self) :
+        global new_list, id_name
         if self.token.family == "Number" :
             new_list.append(self.token.recognized_string)
             self.token = self.get_token()
@@ -1076,6 +1053,7 @@ class Syntax_Analyzer :
 
         elif self.token.family == "Alphabetical":
             new_list.append(self.token.recognized_string)
+            id_name = self.token.recognized_string
             self.token = self.get_token() 
             self.idtail()
                 
@@ -1091,24 +1069,41 @@ class Syntax_Analyzer :
             pass
 
     def actual_par_list(self) :
-        global w, func_name
+        global w, func_name, id_name, func_name_list
+        called_func_name = ""
         if self.token.recognized_string == ")" :
-            pass
+            for my_name in func_name_list :
+                if my_name == id_name :
+                    called_func_name = id_name
+                    break
+            w = self.inter_code.newTemp(IntermediateCode)
+            self.inter_code.genQuad("par", w, "RET", "_")
+            self.inter_code.genQuad("call", "_", "_", called_func_name)
+            new_list[0] = w
+            self.symbol_table.addEntityTable(w, "TempVariable")
+            self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
+            self.symbol_table.getCurrentScope().standard_offset += 4
+
         else :
+            my_id = id_name
             self.expression()
             self.inter_code.genQuad("par", new_list[0], "CV", "_")
             while self.token.recognized_string == "," :
                 self.token = self.get_token()
                 self.expression()
                 self.inter_code.genQuad("par", new_list[0], "CV", "_")
-                w = self.inter_code.newTemp(IntermediateCode)
-                self.inter_code.genQuad("par", w, "RET", "_")
-                self.inter_code.genQuad("call", "_", "_", func_name)
-                self.inter_code.genQuad("retv", w, "_", "_")
-                new_list[0] = w
-                self.symbol_table.addEntityTable(w, "TempVariable")
-                self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
-                self.symbol_table.getCurrentScope().standard_offset += 4
+
+            w = self.inter_code.newTemp(IntermediateCode)
+            self.inter_code.genQuad("par", w, "RET", "_")
+            for my_name in func_name_list :
+                if my_id == my_name  :
+                    called_func_name = my_id
+            
+            self.inter_code.genQuad("call", "_", "_", called_func_name)
+            new_list[0] = w
+            self.symbol_table.addEntityTable(w, "TempVariable")
+            self.symbol_table.updateFields(ent_name= w, offset = self.symbol_table.getCurrentScope().standard_offset)
+            self.symbol_table.getCurrentScope().standard_offset += 4
           
     def optional_sign(self) :
         if self.token.family == "AddOper" :
@@ -1129,8 +1124,9 @@ class Syntax_Analyzer :
             self.token = self.get_token()
             self.bool_factor()
 
-    def bool_factor(self) : 
+    def bool_factor(self) :
         if self.token.recognized_string == "not" :
+            self.is_inverted = True
             self.token = self.get_token() 
             if self.token.recognized_string == "[" :
                 self.token = self.get_token() 
@@ -1154,6 +1150,19 @@ class Syntax_Analyzer :
             self.expression()
             if self.token.family == "RelOp" :
                 operator = self.token.recognized_string 
+                if self.is_inverted :
+                    if operator == "<" :
+                        operator = ">="
+                    elif operator == ">" :
+                        operator = "<="
+                    elif operator == "<=" :
+                        operator = ">"
+                    elif operator == ">=" :
+                        operator = "<"
+                    elif operator == "!=" :
+                        operator = "=="
+                    elif operator == "==" :
+                        operator = "!="
                 first_new_list = new_list
                 self.token = self.get_token() 
                 self.expression()
@@ -1229,156 +1238,156 @@ class Syntax_Analyzer :
         else :
              sys.exit("Invalid syntax when calling main function! \n '(' expected!")
 
-    def createFinalCode(self) :
-        with open ("intermediate_code.int", "r") as int , open("symbol_table.txt", "r") as symb :
-            inter_code_list = int.readlines()
-            smybol_table_list = symb.readlines()
-        self.final_code.produce(".data \nstr_nl: .asciz '\\n' \n.text\n\n\n")
-        self.final_code.produce("L0: \n \tj main\n")
-        for line in inter_code_list:
-            words = line.split()
-            if "begin_block" in words:
-                index = words.index("begin_block")
-                number = words[index-1].rstrip(":")
-                self.final_code.produce("L" + number +":" + " \n \tsw ra,(sp)\n")
-            elif "end_block" in words :
-                index = words.index("end_block")
-                number = words[index-1].rstrip(":")
-                self.final_code.produce("L" + number +":" + " \n \tlw ra,(sp)\n\tjr ra\n")
+    def createFinalCode(self, start_index) :
+        first_par = True
+        d = 0
+        if self.first_data_entry :
+            self.final_code.produce(".data \nstr_nl: .asciz " + '"\\n"' + "\n.text\n\n\n")
+            self.final_code.produce("L0: \n \tj Lmain\n")
+            self.first_data_entry = False
+        i = self.keep_line
+        for i in range(start_index, len(self.inter_code.inter_code_list)) :
+            self.keep_line = len(self.inter_code.inter_code_list) 
+            if self.inter_code.inter_code_list[i].operator == "begin_block" :
+                if "main_" in self.inter_code.inter_code_list[i].oper1 :
+                    for scope in self.symbol_table.scopes :
+                        for entity in scope.entities :
+                            if entity.name == self.inter_code.inter_code_list[i].oper1 :
+                                main_frame_length = entity.frame_length
+                                self.final_code.produce("Lmain:\n")
+                                self.final_code.produce("\taddi sp,sp,"+ str(main_frame_length) + "\n")
+                                self.final_code.produce("\tmv s0,sp\n")
+                                self.final_code.produce("\tsw ra,(sp)\n")
+                else :
+                    self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                    self.final_code.produce("\tsw ra,(sp)\n")
+            
+            
+            if self.inter_code.inter_code_list[i].operator == "+" or self.inter_code.inter_code_list[i].operator == "*" or self.inter_code.inter_code_list[i].operator == "//" or self.inter_code.inter_code_list[i].operator == "-" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "t1")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper2, "t2")
+                
+                if self.inter_code.inter_code_list[i].operator == "+" :
+                    oper = "add"
+                elif self.inter_code.inter_code_list[i].operator == "*" :
+                    oper = "mul"
+                elif self.inter_code.inter_code_list[i].operator == "//" :
+                    oper = "div"
+                else :
+                    oper = "sub"
+                self.final_code.produce("\t" + oper + " t1,t1,t2\n")
+                self.final_code.storerv("t1" ,self.inter_code.inter_code_list[i].oper3) 
 
-            elif "halt" in words :
-                index = words.index("halt")
-                number = words[index-1].rstrip(":")
-                self.final_code.produce("L" + number +":" + " \n \tli a0,0\n\tli a7,93\n\tecall\n")
+            if self.inter_code.inter_code_list[i].operator == "<" or self.inter_code.inter_code_list[i].operator == ">" or self.inter_code.inter_code_list[i].operator == "<=" or self.inter_code.inter_code_list[i].operator == ">=" or self.inter_code.inter_code_list[i].operator == "==" or self.inter_code.inter_code_list[i].operator == "!=" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "t1")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper2, "t2")
+                oper = ""
+                if self.inter_code.inter_code_list[i].operator == ">" :
+                    oper = "bgt"
+                elif self.inter_code.inter_code_list[i].operator == "<" :
+                    oper = "blt"
+                elif self.inter_code.inter_code_list[i].operator == ">=" :
+                    oper = "bge"
+                elif self.inter_code.inter_code_list[i].operator == "<=" :
+                    oper = "ble"
+                elif self.inter_code.inter_code_list[i].operator == "==" :
+                    oper = "beq"
+                else :
+                    oper = "bne"
+                self.final_code.produce("\t" + oper + " t1,t2,L" + str(self.inter_code.inter_code_list[i].oper3) + "\n")
+                
+            if self.inter_code.inter_code_list[i].operator == ":=" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "t1")
+                self.final_code.storerv("t1", self.inter_code.inter_code_list[i].oper3)
+            
+            if self.inter_code.inter_code_list[i].operator == "retv" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.produce("\tlw t0, -8(sp)\n")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "t1")
+                self.final_code.produce("\tsw t1, (t0)\n")
+                self.final_code.produce("\tlw ra,(sp)\n\tjr ra\n")           
 
-            elif "RET" in words :
-                index = words.index("RET")
-                number = words[index-2].rstrip(":")
-                value = words[index-1]
-                self.final_code.produce("L" + number +":\n")
-                if # DEN BRHKA PARAMETROUS PIO PANW
-                    line_str_func_name = inter_code_list[number]
-                    str_func_name = line_str_func_name.split()
-                    actual_func_name = str_func_name[-1]
-                    for symb_line in smybol_table_list :
-                        if actual_func_name in symb_line :
-                            temp_line = symb_line.split()
-                            frame_length_value = temp_line[-1]
-                            self.final_code.produce("\taddi, fp, sp," + frame_length_value)
-                self.final_code.loadvr(value, "t1")
-                for symb_line in smybol_table_list :
-                    if value in symb_line :
-                        temp_words = symb_line.split()
-                        offset_value = int(temp_words[-1])
-                self.final_code.produce("\taddi t0, sp, -" + offset_value)
-                self.final_code.produce("\tsw t0,-8(fp)\n")    
 
-
-            elif "retv" in words :
-                index = words.index("retv")
-                number = words[index-1].rstrip(":")
-                value = words[index +1]
-                self.final_code.produce("L" + number +":\n")
-                self.final_code.loadvr(value, "t1")
-                self.final_code.produce("\tlw t0,-8(sp)\n")
-                self.final_code.produce("\tsw t1,(t0)\n")
-
-            elif "out" in words :
-                index = words.index("out")
-                number = words[index-1].rstrip(":")
-                value = words[index +1]
-                self.final_code.loadvr(value, "a0")
+            if self.inter_code.inter_code_list[i].operator == "end_block" : 
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.produce("\tlw ra,(sp)\n\tjr ra\n")           
+            
+            if self.inter_code.inter_code_list[i].operator == "out" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "a0")
                 self.final_code.produce("\tli a7,1\n")
                 self.final_code.produce("\tecall\n")
-                self.final_code.produce("\tla a0,str_n\n")
+                self.final_code.produce("\tla a0,str_nl\n")
                 self.final_code.produce("\tli a7,4\n")
                 self.final_code.produce("\tecall\n")
 
-
-            elif ":=" in words:
-                index = words.index(":=")
-                Lnumber = words[index-1].rstrip(":")
-                value = words[index + 1]
-                store_value = words[index + 3]
-                self.final_code.produce("L" + Lnumber +":\n" )
-                if value.isdigit() :
-                    self.final_code.loadvr(int(value), "t1")
-                    self.final_code.storerv("t1", store_value)
-                else :
-                    self.final_code.loadvr(value, "t1")
-                    self.final_code.storerv( "t1", store_value)
-
-            elif "+" in words :
-                index = words.index("+")
-                Lnumber = words[index-1].rstrip(":")
-                oper1 = words[index + 1]
-                oper2 = words[index + 2]
-                store_value = words[index + 3]
-                self.final_code.produce("L" + Lnumber +":\n" )
-                if oper1.isdigit() :
-                    self.final_code.loadvr(oper2, "t1")
-                    self.final_code.produce("addi t1, t1," + oper1)
-                    self.final_code.storerv("t1", store_value)
-                elif oper2.isdigit() :
-                    self.final_code.loadvr(oper1, "t1")
-                    self.final_code.produce("addi t1, t1," + oper2)
-                    self.final_code.storerv("t1", store_value)
-
-                else :
-                    self.final_code.loadvr(oper1, "t1")
-                    self.final_code.loadvr(oper2, "t2")
-                    self.final_code.produce("add t2, t2, t1")
-                    self.final_code.storerv( "t2", store_value)
+        
+            if self.inter_code.inter_code_list[i].operator == "inp" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.produce("\tli a7,5\n")
+                self.final_code.produce("\tecall\n")
+                self.final_code.storerv("a0", self.inter_code.inter_code_list[i].oper3)
             
-            elif "-" in words :
-                index = words.index("-")
-                Lnumber = words[index-1].rstrip(":")
-                oper1 = words[index + 1]
-                oper2 = words[index + 2]
-                store_value = words[index + 3]
-                self.final_code.produce("L" + Lnumber +":\n" )
-                if oper1.isdigit() :
-                    self.final_code.loadvr(oper2, "t1")
-                    self.final_code.produce("addi t1, t1,-" + oper1)
-                    self.final_code.storerv("t1", store_value)
-                elif oper2.isdigit() :
-                    self.final_code.loadvr(oper1, "t1")
-                    self.final_code.produce("addi t1, -t1," + oper2)
-                    self.final_code.storerv("t1", store_value)
+            if self.inter_code.inter_code_list[i].operator == "halt" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.produce("\tli a0,0\n")
+                self.final_code.produce("\tli a7,93\n")
+                self.final_code.produce("\tecall\n")
 
-                else :
-                    self.final_code.loadvr(oper1, "t1")
-                    self.final_code.loadvr(oper2, "t2")
-                    self.final_code.produce("add t2, -t2, t1")
-                    self.final_code.storerv( "t2", store_value)
+            if self.inter_code.inter_code_list[i].operator == "par" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                if self.inter_code.inter_code_list[i].oper2 == "CV" :
+                    if first_par :
+                        for quad in self.inter_code.inter_code_list :
+                            if quad.operator == "call" :
+                                the_called_func_name = quad.oper3
+                                for scope in self.symbol_table.scopes :
+                                    for entity in scope.entities :
+                                        if the_called_func_name == entity.name :
+                                            frame_length = entity.frame_length
+                                            self.final_code.produce("\taddi fp,sp," + str(frame_length) + "\n")
+                                            first_par = False
+                                            break        
+                                break
+                    self.final_code.loadvr(self.inter_code.inter_code_list[i].oper1, "t1")
+                    self.final_code.produce("\tsw t1,-" + str((12+4*d))+"(fp)\n")
+                    d += 1
+                if self.inter_code.inter_code_list[i].oper2 == "RET" :
+                    result = self.symbol_table.searchForEntry(self.inter_code.inter_code_list[i].oper1)
+                    entity = result[0]
+                    offset = entity.offset
+                    self.final_code.produce("\taddi t0,sp,-" + str(offset) + "\n")
+                    self.final_code.produce("\tsw t0,-8(fp)\n")
 
-            elif "*" in words :
-                index = words.index("*")
-                Lnumber = words[index-1].rstrip(":")
-                oper1 = words[index + 1]
-                oper2 = words[index + 2]
-                store_value = words[index + 3]
-                self.final_code.produce("L" + Lnumber +":\n" )
-                self.final_code.loadvr(oper1, "t1")
-                self.final_code.loadvr(oper2, "t2")
-                self.final_code.produce("mul t3, t1, t2")
-                self.final_code.storerv( "t3", store_value)
-            
-            elif "//" in words :
-                index = words.index("//")
-                Lnumber = words[index-1].rstrip(":")
-                oper1 = words[index + 1]
-                oper2 = words[index + 2]
-                store_value = words[index + 3]
-                self.final_code.produce("L" + Lnumber +":\n" )
-                self.final_code.loadvr(oper1, "t1")
-                self.final_code.loadvr(oper2, "t2")
-                self.final_code.produce("div t3, t1, t2")
-                self.final_code.storerv( "t3", store_value)
+            if self.inter_code.inter_code_list[i].operator == "call" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                name = self.inter_code.inter_code_list[i].oper3
+                for scope in self.symbol_table.scopes :
+                    for entity in scope.entities :
+                        if entity.name == name :
+                            frame_length = entity.frame_length
+                            starting_quad = entity.starting_quad
+                            break
+                result = self.symbol_table.searchForEntry(name)
+                func_level = result[1]
+                my_level = self.symbol_table.getCurrentScope().level
+                if my_level == func_level :
+                    self.final_code.produce("\tlw t0,-4(sp)\n")
+                    self.final_code.produce("\tsw t0-4(fp)\n")
+                else : 
+                    self.final_code.produce("\tsw sp,-4(fp)\n")
+                self.final_code.produce("\taddi sp,sp," + str(frame_length) + "\n")
+                self.final_code.produce("\tjal L" + str(starting_quad) + "\n")
+                self.final_code.produce("\taddi sp,sp,-" + str(frame_length) + "\n")
 
-            
+            if self.inter_code.inter_code_list[i].operator == "jump" :
+                self.final_code.produce("L" + str((i + quad_length_list)) + ":\n")
+                self.final_code.produce("\tj L" + str(self.inter_code.inter_code_list[i].oper3) + "\n")
 
-
+        
 if __name__ == '__main__' :
     if len(sys.argv) < 2 :
         sys.exit("The format is 'python 'cutepy_4761_4765'.py 'test_file'.cpy !'")
@@ -1387,5 +1396,3 @@ if __name__ == '__main__' :
     my_lex = Lex(input_file,1)
     my_parser = Syntax_Analyzer(input_file, my_lex)
     my_parser.start_rule()
-    my_parser.createFinalCode()
-
