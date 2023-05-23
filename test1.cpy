@@ -1,9 +1,16 @@
-def my_main():
+def main_countdigits():
 #{
-    #declare x,y
-    #declare my_var
-    my_var = 5;
+	#declare x, count
+	x = int(input());
+	count = 0;
+	while (x>0):
+	#{
+		x = x // 10;
+		count = count + 1;
+	#}
+	print(count);
 #}
 
+
 if __name__ == __main__:
-    main();
+    main_countdigits();

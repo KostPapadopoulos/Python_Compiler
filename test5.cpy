@@ -1,18 +1,21 @@
 def main_1():
 #{
 	#declare x
+	def topikh(t) :
+	#{
+		return(t);
+	#}
+	def aderfos(c) :
+	#{ 
+		c = c + 1;
+		f = topikh(c) + 1;
+		return(f);
+	#}
+	y = 2;
 	x = 5 * y * 2;
+	return(aderfos(4));
+	
 #}
 
-def main_2() :
-#{
-	#declare var
-	if (var > 5 or not [t < 7]):
-	#{
-		print(Ok);
-		return(ok);
-	#}
-#}
 if __name__ == __main__:
 	main_1();
-	main_2();
